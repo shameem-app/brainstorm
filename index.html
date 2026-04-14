@@ -906,6 +906,7 @@ onAuthStateChanged(auth,user=>{
   }else{
     // Clear all map data and session on sign-out
     sessionStorage.removeItem('bs_activeMap');
+    sessionStorage.removeItem('bs_screen');
     if(typeof window.clearCanvas==='function') window.clearCanvas();
     document.getElementById('authScreen').style.display='flex';
     document.getElementById('appWrap').style.display='none';
@@ -1012,7 +1013,11 @@ function renderMapList(maps){
   });
 }
 
-window.hsShow=()=>{document.getElementById('homeScreen').style.display='flex';};
+window.hsShow=()=>{
+  sessionStorage.setItem('bs_screen','home');
+  sessionStorage.removeItem('bs_activeMap');
+  document.getElementById('homeScreen').style.display='flex';
+};
 window.hsHide=()=>{document.getElementById('homeScreen').style.display='none';};
 
 window.hsNewMap=()=>{
@@ -1027,6 +1032,7 @@ window.hsDoCreate=async()=>{
   window.clearCanvas();
   window.activeMapId='map_'+Date.now();
   sessionStorage.setItem('bs_activeMap',window.activeMapId);
+  sessionStorage.setItem('bs_screen','map');
   window.mkNode({x:0,y:0,title,type:'basic',isRoot:true});
   hsHide();
   window.applyTF();window.updZoom();window.drawGrid();window.updStatus();window.schedLayout();
@@ -1043,6 +1049,7 @@ window.hsOpenMap=async(id)=>{
     nidx=(nodes||[]).reduce((m,n)=>Math.max(m,+(n.id.split('_')[0].slice(1))||0),0);
     window.activeMapId=id;
     sessionStorage.setItem('bs_activeMap',id);
+    sessionStorage.setItem('bs_screen','map');
     nodes.forEach(renderNode);
     hsHide();
     applyTF();updZoom();drawGrid();updStatus();
@@ -1416,14 +1423,15 @@ function clearCanvas(){
 
 // bsBoot is called by the Firebase module once the user is signed in
 window.bsBoot=async function(){
-  // Try to restore the last open map from this session
+  const screen=sessionStorage.getItem('bs_screen')||'home';
   const lastId=sessionStorage.getItem('bs_activeMap');
-  if(lastId){
+
+  // ── Restore map screen ──
+  if(screen==='map'&&lastId){
     try{
       const d=await window.fsReadMap(lastId);
       if(d){
         window.clearCanvas();
-        // Make sure home screen is hidden
         document.getElementById('homeScreen').style.display='none';
         nodes=d.nodes||[];conns=d.conns||[];
         if(d.cg)Object.assign(cg,d.cg);
@@ -1436,9 +1444,12 @@ window.bsBoot=async function(){
         return;
       }
     }catch(e){}
+    // Map load failed — fall through to home
   }
-  // No session map — show home screen
+
+  // ── Restore home screen (or default) ──
   clearCanvas();
+  document.getElementById('homeScreen').style.display='none'; // let hsShow set it
   hsShow();
 };
 
@@ -2974,6 +2985,7 @@ async function doSave(){
   const data={nodes,conns,zoom,px,py,cg,twoSide,title,savedAt:Date.now()};
   if(window.fsWriteMap) await window.fsWriteMap(id,data);
   sessionStorage.setItem('bs_activeMap',id);
+  sessionStorage.setItem('bs_screen','map');
   const si=document.getElementById('si');si.classList.add('vis');
   document.getElementById('sTm').textContent='Saved '+new Date().toLocaleTimeString();
   setTimeout(()=>si.classList.remove('vis'),2400);

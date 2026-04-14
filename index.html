@@ -1634,7 +1634,7 @@ function renderNode(node){
        `onfocus="onBasicFocus('${node.id}')" `+
        `onchange="nChg('${node.id}','text',this.value)" `+
        `onclick="event.stopPropagation()" `+
-       `onkeydown="textKD(event,'${node.id}')" `+
+       `onkeydown="onTypingKD(event,'${node.id}');textKD(event,'${node.id}')" `+
        `placeholder="${bullet?(bullet+' '):'Type here…'}">${esc(node.text)}</textarea>`;
     h+=`</div>`;
   }
@@ -1647,8 +1647,9 @@ function renderNode(node){
        `onchange="nChg('${node.id}','title',this.value)" `+
        `onfocus="onFieldFocus('${node.id}','title')" `+
        `onblur="nChgSave('${node.id}','title',this.value)" `+
+       `onkeydown="onTypingKD(event,'${node.id}');titleKD(event,'${node.id}')" `+
        `onclick="event.stopPropagation()" `+
-       `onkeydown="titleKD(event,'${node.id}')" placeholder="Title…">`;
+       `placeholder="Title…">`;
     h+=`</div>`;
     h+=`<div class="nb">`;
     if(node.image)
@@ -1660,8 +1661,9 @@ function renderNode(node){
       h+=`<textarea class="ntxt" rows="2" style="${nS}" `+
          `onchange="nChg('${node.id}','text',this.value)" `+
          `onblur="nChgSave('${node.id}','text',this.value)" `+
+         `onfocus="onFieldFocus('${node.id}','text')" `+
          `onclick="event.stopPropagation()" `+
-         `onkeydown="textKD(event,'${node.id}')" placeholder="Add notes…">${esc(node.text)}</textarea>`;
+         `onkeydown="onTypingKD(event,'${node.id}');textKD(event,'${node.id}')" placeholder="Add notes…">${esc(node.text)}</textarea>`;
     if(node.type==='check'||node.checklist.length){
       h+=`<div class="ncl" style="${nS}">`;
       node.checklist.forEach(it=>{
@@ -1808,6 +1810,11 @@ function autoResizeNodeWidth(ta, node){
   }
 }
 
+// Word-break characters that trigger a history snapshot
+const _WORD_BREAK=/^[ .,;:!?'"\)\(\[\]\/\\+\-=\n]$/;
+// Per-node timer for the pause-based snapshot
+let _histTimer={};
+
 function onBasicInput(ta, nodeId){
   ta.style.height='auto';
   ta.style.height=ta.scrollHeight+'px';
@@ -1816,12 +1823,12 @@ function onBasicInput(ta, nodeId){
   const n=nodes.find(x=>x.id===nodeId);
   if(n) autoResizeNodeWidth(ta, n);
 
+  // Debounced text update + bullet renumbering
   clearTimeout(_basicTimer[nodeId]);
   _basicTimer[nodeId]=setTimeout(()=>{
     const nd=nodes.find(x=>x.id===nodeId);
     if(!nd)return;
     if(nd.bullet==='1.'){
-      // Renumber all lines live for numbered bullets
       const renum=reNumberLines(ta.value);
       if(renum!==ta.value){
         const pos=ta.selectionStart;
@@ -1832,6 +1839,29 @@ function onBasicInput(ta, nodeId){
     }
     nd.text=ta.value;
   },150);
+
+  // Pause-based history snapshot (1.5s of no typing = save a step)
+  clearTimeout(_histTimer[nodeId]);
+  _histTimer[nodeId]=setTimeout(()=>{
+    const nd=nodes.find(x=>x.id===nodeId);
+    if(nd&&nd.text!==ta.value){nd.text=ta.value;}
+    saveHist();
+  },1500);
+}
+
+// Called from textarea onkeydown — saves undo snapshot on word-break chars
+function onTypingKD(e, nodeId){
+  const isWordBreak=_WORD_BREAK.test(e.key)||e.key==='Backspace'||e.key==='Delete';
+  if(isWordBreak){
+    const nd=nodes.find(x=>x.id===nodeId);
+    const ta=e.target;
+    if(!nd)return;
+    // Sync current field value before snapshot
+    const field=ta.classList.contains('ntitle')?'title':'text';
+    if(nd[field]!==ta.value) nd[field]=ta.value;
+    clearTimeout(_histTimer[nodeId]);
+    saveHist();
+  }
 }
 
 // Renumber all lines that start with "N. " (any number followed by ". ")
@@ -3011,6 +3041,7 @@ function updUndoRedo(){
   if(rBtn){rBtn.disabled=hIdx>=hist.length-1;rBtn.style.opacity=(hIdx>=hist.length-1)?'.35':'1';}
 }
 function restH(){
+  deactivateEdit(); // exit edit mode so restored text shows cleanly
   const d=JSON.parse(hist[hIdx]);
   nodes=d.nodes;conns=d.conns;
   if(d.COL_GAP!==undefined){COL_GAP=d.COL_GAP;document.getElementById('ltCG').value=COL_GAP;document.getElementById('ltCGv').textContent=COL_GAP+'px';}

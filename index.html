@@ -380,23 +380,32 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);
       </svg>
       <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:28px;
         background:linear-gradient(90deg,var(--a),var(--a2));
-        -webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px;">Brain Storm</div>
-      <div style="font-size:12px;color:var(--tx3);">Sign in to your visual thinking workspace</div>
+        -webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px;">Brain Storm</div>
+      <div style="font-size:13px;color:var(--tx3);">Sign in to your visual thinking workspace</div>
     </div>
 
-    <div id="authForm" style="background:var(--sf);border:1px solid var(--bd);border-radius:16px;padding:28px;">
-      <div style="margin-bottom:14px;">
-        <div style="font-size:9px;color:var(--tx3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Email</div>
-        <input id="authEmail" class="pi" type="email" placeholder="you@example.com" style="width:100%" autocomplete="email">
+    <div id="authForm" style="background:var(--sf);border:1px solid var(--bd);border-radius:18px;padding:32px;">
+      <div style="margin-bottom:18px;">
+        <div style="font-size:10px;color:var(--tx3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">Email</div>
+        <input id="authEmail" class="pi" type="email" placeholder="you@example.com"
+          style="width:100%;font-size:14px;padding:10px 12px;" autocomplete="email">
       </div>
-      <div style="margin-bottom:20px;">
-        <div style="font-size:9px;color:var(--tx3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;">Password</div>
-        <input id="authPass" class="pi" type="password" placeholder="••••••••" style="width:100%" autocomplete="current-password">
+      <div style="margin-bottom:8px;">
+        <div style="font-size:10px;color:var(--tx3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;">Password</div>
+        <input id="authPass" class="pi" type="password" placeholder="••••••••"
+          style="width:100%;font-size:14px;padding:10px 12px;" autocomplete="current-password">
       </div>
-      <div id="authErr" style="font-size:11px;color:var(--a2);margin-bottom:12px;min-height:16px;"></div>
-      <div style="display:flex;gap:8px;">
-        <button class="xbtn pri" style="flex:1;justify-content:center;padding:9px" onclick="authSignIn()">Sign In</button>
-        <button class="xbtn" style="flex:1;justify-content:center;padding:9px" onclick="authSignUp()">Create Account</button>
+      <div style="text-align:right;margin-bottom:18px;">
+        <button onclick="authForgot()" style="background:none;border:none;color:var(--tx3);
+          font-size:11px;cursor:pointer;font-family:'DM Sans',sans-serif;padding:0;
+          transition:color .12s;" onmouseover="this.style.color='var(--a)'" onmouseout="this.style.color='var(--tx3)'">
+          Forgot password?
+        </button>
+      </div>
+      <div id="authErr" style="font-size:12px;color:var(--a2);margin-bottom:14px;min-height:18px;"></div>
+      <div style="display:flex;gap:10px;">
+        <button class="xbtn pri" style="flex:1;justify-content:center;padding:12px;font-size:13px;" onclick="authSignIn()">Sign In</button>
+        <button class="xbtn" style="flex:1;justify-content:center;padding:12px;font-size:13px;" onclick="authSignUp()">Create Account</button>
       </div>
     </div>
   </div>
@@ -849,7 +858,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);
 // ════════════════════════════════════════════════════════════════
 import{initializeApp}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import{getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,
-  signOut}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+  sendPasswordResetEmail,signOut}from'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 import{getFirestore,collection,doc,setDoc,getDoc,getDocs,deleteDoc,query,orderBy,onSnapshot}
   from'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
@@ -878,6 +887,8 @@ onAuthStateChanged(auth,user=>{
     subscribeToMaps();
     if(typeof window.bsBoot==='function') window.bsBoot();
   }else{
+    // Clear all map data from memory on sign-out
+    if(typeof window.clearCanvas==='function') window.clearCanvas();
     document.getElementById('authScreen').style.display='flex';
     document.getElementById('appWrap').style.display='none';
     if(_unsubMaps){_unsubMaps();_unsubMaps=null;}
@@ -889,7 +900,7 @@ window.authSignIn=async()=>{
   const email=document.getElementById('authEmail').value.trim();
   const pass=document.getElementById('authPass').value;
   const err=document.getElementById('authErr');
-  err.textContent='';
+  err.textContent='';err.style.color='var(--a2)';
   try{await signInWithEmailAndPassword(auth,email,pass);}
   catch(e){err.textContent=friendlyErr(e.code);}
 };
@@ -897,12 +908,25 @@ window.authSignUp=async()=>{
   const email=document.getElementById('authEmail').value.trim();
   const pass=document.getElementById('authPass').value;
   const err=document.getElementById('authErr');
-  err.textContent='';
+  err.textContent='';err.style.color='var(--a2)';
   if(pass.length<6){err.textContent='Password must be at least 6 characters.';return;}
   try{await createUserWithEmailAndPassword(auth,email,pass);}
   catch(e){err.textContent=friendlyErr(e.code);}
 };
 window.authSignOut=async()=>{await signOut(auth);};
+window.authForgot=async()=>{
+  const email=document.getElementById('authEmail').value.trim();
+  const err=document.getElementById('authErr');
+  if(!email){err.textContent='Enter your email address first.';err.style.color='var(--a4)';return;}
+  try{
+    await sendPasswordResetEmail(auth,email);
+    err.style.color='var(--a3)';
+    err.textContent='✓ Password reset email sent — check your inbox.';
+  }catch(e){
+    err.style.color='var(--a2)';
+    err.textContent=friendlyErr(e.code);
+  }
+};
 
 document.addEventListener('keydown',e=>{
   if(document.getElementById('authScreen').style.display!=='none'&&e.key==='Enter')window.authSignIn();
@@ -982,13 +1006,7 @@ window.hsNewMap=()=>{
 window.hsDoCreate=async()=>{
   const title=document.getElementById('hsNewTitle').value.trim()||'My Mind Map';
   document.getElementById('hsNewMd').style.display='none';
-  const cv=document.getElementById('canvas'),svgL=document.getElementById('svg-layer');
-  window.nodes=[];window.conns=[];
-  cv.innerHTML='';svgL.innerHTML='<defs id="svgDefs"></defs>';
-  window.nidx=0;window.selN=null;window.selC=null;
-  window._rootCX=null;window._rootCY=null;window.zoom=1;
-  const cw=document.getElementById('cw');
-  window.px=(cw.clientWidth-240)/2;window.py=cw.clientHeight/2;
+  window.clearCanvas();
   window.activeMapId='map_'+Date.now();
   window.mkNode({x:0,y:0,title,type:'basic',isRoot:true});
   hsHide();
@@ -999,21 +1017,16 @@ window.hsDoCreate=async()=>{
 window.hsOpenMap=async(id)=>{
   try{
     const d=await window.fsReadMap(id);if(!d)return;
-    const cv=document.getElementById('canvas'),svgL=document.getElementById('svg-layer');
-    window.nodes=d.nodes||[];window.conns=d.conns||[];
-    window.zoom=1;
-    const cw=document.getElementById('cw');
-    window.px=(cw.clientWidth-240)/2;window.py=cw.clientHeight/2;
-    window._rootCX=null;window._rootCY=null;
-    if(d.cg)Object.assign(window.cg,d.cg);
-    if(d.twoSide!==undefined)window.twoSide=d.twoSide;
-    window.nidx=(window.nodes||[]).reduce((m,n)=>Math.max(m,+(n.id.split('_')[0].slice(1))||0),0);
+    window.clearCanvas();
+    nodes=d.nodes||[];conns=d.conns||[];
+    if(d.cg)Object.assign(cg,d.cg);
+    if(d.twoSide!==undefined)twoSide=d.twoSide;
+    nidx=(nodes||[]).reduce((m,n)=>Math.max(m,+(n.id.split('_')[0].slice(1))||0),0);
     window.activeMapId=id;
-    cv.innerHTML='';svgL.innerHTML='<defs id="svgDefs"></defs>';
-    window.nodes.forEach(window.renderNode);
+    nodes.forEach(renderNode);
     hsHide();
-    window.applyTF();window.updZoom();window.drawGrid();window.updStatus();
-    setTimeout(()=>window.runLayout(false),100);
+    applyTF();updZoom();drawGrid();updStatus();
+    setTimeout(()=>runLayout(false),100);
   }catch(e){alert('Could not load map: '+e.message);}
 };
 
@@ -1354,16 +1367,36 @@ function setPos(node, x, y, animate){
 function boot(){
   window.addEventListener('resize',()=>{drawGrid(); setTimeout(()=>runLayout(false),50);});
   applyTF(); updZoom(); saveHist(); startAutoSave(); drawGrid();
-  // Expose functions needed by the Firebase ESM module
+  // Expose functions and state needed by the Firebase ESM module
   window.mkNode=mkNode; window.renderNode=renderNode; window.runLayout=runLayout;
   window.schedLayout=schedLayout; window.applyTF=applyTF; window.updZoom=updZoom;
   window.drawGrid=drawGrid; window.updStatus=updStatus; window.doSave=doSave;
   window.renderConns=renderConns; window.cg=cg; window.showToast=showToast;
-  window.activeMapId=activeMapId;
+  window.clearCanvas=clearCanvas;
+}
+
+// Fully reset all canvas state — called before loading or creating a map
+function clearCanvas(){
+  nodes=[];conns=[];
+  selN=null;selC=null;multiSel=[];
+  hist=[];hIdx=-1;
+  nidx=0;
+  zoom=1;
+  const cw=document.getElementById('cw');
+  px=cw?(cw.clientWidth-240)/2:80;
+  py=cw?cw.clientHeight/2:400;
+  _rootCX=null;_rootCY=null;
+  window.activeMapId=null;
+  const cv=document.getElementById('canvas');
+  const svgL=document.getElementById('svg-layer');
+  if(cv) cv.innerHTML='';
+  if(svgL) svgL.innerHTML='<defs id="svgDefs"></defs>';
+  updStatus(); applyTF(); updZoom(); drawGrid();
 }
 
 // bsBoot is called by the Firebase module once the user is signed in
 window.bsBoot=function(){
+  clearCanvas();
   hsShow();
 };
 

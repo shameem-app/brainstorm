@@ -441,9 +441,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);
   <button class="tbtn on" id="tSel" onclick="setTool('sel')" title="Select S">
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 3l14 9-7 1-4 7z"/></svg>Select
   </button>
-  <button class="tbtn" id="tCon" onclick="setTool('con')" title="Connect C">
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="5" cy="5" r="3"/><circle cx="19" cy="19" r="3"/><path d="M7 7l10 10"/></svg>Connect
-  </button>
   <button class="tbtn" id="tPan" onclick="setTool('pan')" title="Pan P">
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3"/></svg>Pan
   </button>
@@ -468,7 +465,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);
   <div class="sw" style="background:#f7b731" onclick="setTheme('#f7b731','#ff6584',this)"></div>
   <div class="sw" style="background:#ee0979" onclick="setTheme('#ee0979','#ff6a00',this)"></div>
   <div class="vsep"></div>
-  <span style="font-size:10px;color:var(--tx3)"><span class="kb">Enter</span> sibling &nbsp;<span class="kb">Tab</span> child</span>
+  <span style="font-size:10px;color:var(--tx3)"><span class="kb">Enter</span> sibling &nbsp;<span class="kb">Tab</span> child &nbsp;<span class="kb">Space</span> pan</span>
 </div>
 
 <!-- BODY -->
@@ -905,8 +902,8 @@ onAuthStateChanged(auth,user=>{
     if(typeof window.bsBoot==='function') window.bsBoot();
   }else{
     // Clear all map data and session on sign-out
-    sessionStorage.removeItem('bs_activeMap');
-    sessionStorage.removeItem('bs_screen');
+    localStorage.removeItem('bs_activeMap');
+    localStorage.removeItem('bs_screen');
     if(typeof window.clearCanvas==='function') window.clearCanvas();
     document.getElementById('authScreen').style.display='flex';
     document.getElementById('appWrap').style.display='none';
@@ -1014,8 +1011,8 @@ function renderMapList(maps){
 }
 
 window.hsShow=()=>{
-  sessionStorage.setItem('bs_screen','home');
-  sessionStorage.removeItem('bs_activeMap');
+  localStorage.setItem('bs_screen','home');
+  localStorage.removeItem('bs_activeMap');
   document.getElementById('homeScreen').style.display='flex';
 };
 window.hsHide=()=>{document.getElementById('homeScreen').style.display='none';};
@@ -1031,8 +1028,8 @@ window.hsDoCreate=async()=>{
   document.getElementById('hsNewMd').style.display='none';
   window.clearCanvas();
   window.activeMapId='map_'+Date.now();
-  sessionStorage.setItem('bs_activeMap',window.activeMapId);
-  sessionStorage.setItem('bs_screen','map');
+  localStorage.setItem('bs_activeMap',window.activeMapId);
+  localStorage.setItem('bs_screen','map');
   window.mkNode({x:0,y:0,title,type:'basic',isRoot:true});
   hsHide();
   window.applyTF();window.updZoom();window.drawGrid();window.updStatus();window.schedLayout();
@@ -1048,8 +1045,8 @@ window.hsOpenMap=async(id)=>{
     if(d.twoSide!==undefined)twoSide=d.twoSide;
     nidx=(nodes||[]).reduce((m,n)=>Math.max(m,+(n.id.split('_')[0].slice(1))||0),0);
     window.activeMapId=id;
-    sessionStorage.setItem('bs_activeMap',id);
-    sessionStorage.setItem('bs_screen','map');
+    localStorage.setItem('bs_activeMap',id);
+    localStorage.setItem('bs_screen','map');
     nodes.forEach(renderNode);
     hsHide();
     applyTF();updZoom();drawGrid();updStatus();
@@ -1423,8 +1420,8 @@ function clearCanvas(){
 
 // bsBoot is called by the Firebase module once the user is signed in
 window.bsBoot=async function(){
-  const screen=sessionStorage.getItem('bs_screen')||'home';
-  const lastId=sessionStorage.getItem('bs_activeMap');
+  const screen=localStorage.getItem('bs_screen')||'home';
+  const lastId=localStorage.getItem('bs_activeMap');
 
   // ── Restore map screen ──
   if(screen==='map'&&lastId){
@@ -2253,7 +2250,7 @@ const marqueeEl=document.getElementById('marquee');
 
 cWrap.addEventListener('mousedown',e=>{
   if(e.target===cWrap||e.target===cv||e.target===svgL||e.target===gcEl){
-    if(tool==='pan'||e.button===1){
+    if(tool==='pan'||e.button===1||_spaceDown){
       panning=true;panSt={x:e.clientX,y:e.clientY};cv.style.cursor='grabbing';
     } else if(tool==='sel'&&e.button===0){
       const rect=cWrap.getBoundingClientRect();
@@ -2957,11 +2954,10 @@ function sTab(el,tab){
 }
 function setTool(t){
   tool=t;
-  ['tSel','tCon','tPan'].forEach(id=>document.getElementById(id)?.classList.remove('on'));
-  document.getElementById({sel:'tSel',con:'tCon',pan:'tPan'}[t])?.classList.add('on');
-  cv.style.cursor=t==='pan'?'grab':t==='con'?'crosshair':'default';
-  // Show/hide ports based on connect mode
-  document.getElementById('canvas').classList.toggle('con-mode',t==='con');
+  ['tSel','tPan'].forEach(id=>document.getElementById(id)?.classList.remove('on'));
+  document.getElementById({sel:'tSel',pan:'tPan'}[t])?.classList.add('on');
+  cv.style.cursor=t==='pan'?'grab':'default';
+  document.getElementById('canvas').classList.remove('con-mode');
 }
 function setTheme(c1,c2,el){
   document.documentElement.style.setProperty('--a',c1);
@@ -2984,8 +2980,8 @@ async function doSave(){
   const title=root?(root.title||root.text||'Untitled').replace(/^🧠\s*/,''):'Untitled';
   const data={nodes,conns,zoom,px,py,cg,twoSide,title,savedAt:Date.now()};
   if(window.fsWriteMap) await window.fsWriteMap(id,data);
-  sessionStorage.setItem('bs_activeMap',id);
-  sessionStorage.setItem('bs_screen','map');
+  localStorage.setItem('bs_activeMap',id);
+  localStorage.setItem('bs_screen','map');
   const si=document.getElementById('si');si.classList.add('vis');
   document.getElementById('sTm').textContent='Saved '+new Date().toLocaleTimeString();
   setTimeout(()=>si.classList.remove('vis'),2400);
@@ -3071,20 +3067,110 @@ function exportMap(){alert('📦 Export\n\nIn Electron: saves PNG/SVG.\nBrowser:
 // ════════════════════════════════════════════════════════════════
 // KEYBOARD
 // ════════════════════════════════════════════════════════════════
+let _spaceDown=false;
+let _clipboard=null; // {nodes, conns} subtree snapshot for copy/paste
+
 document.addEventListener('keydown',e=>{
   const inp=e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA';
+
+  // Spacebar pan — works even when typing is not active
+  if(e.key===' '&&!inp){
+    e.preventDefault();
+    if(!_spaceDown){
+      _spaceDown=true;
+      cv.style.cursor='grab';
+    }
+    return;
+  }
+
   if(e.key==='Escape'){e.target.blur?.();deselectAll();deselectConn();return;}
   if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){undo();return;}
   if((e.ctrlKey||e.metaKey)&&(e.key==='z'&&e.shiftKey||e.key==='y')){redo();return;}
   if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();doSave();return;}
+
+  // Ctrl+C — copy selected node + its whole subtree
+  if((e.ctrlKey||e.metaKey)&&e.key==='c'&&!inp){
+    e.preventDefault();
+    if(selN) copySubtree(selN);
+    return;
+  }
+  // Ctrl+V — paste as child of selected node (or root if none selected)
+  if((e.ctrlKey||e.metaKey)&&e.key==='v'&&!inp){
+    e.preventDefault();
+    pasteSubtree();
+    return;
+  }
+
   if(inp)return;
   if(e.key==='Enter'){e.preventDefault();addSibling();}
   if(e.key==='Tab'){e.preventDefault();addChild();}
   if(e.key==='Delete'||e.key==='Backspace'){if(selC)delConnById(selC.id);else delSel();}
   if(e.key==='s'||e.key==='S')setTool('sel');
-  if(e.key==='c'||e.key==='C')setTool('con');
   if(e.key==='p'||e.key==='P')setTool('pan');
 });
+
+document.addEventListener('keyup',e=>{
+  if(e.key===' '){
+    _spaceDown=false;
+    if(!panning) cv.style.cursor=tool==='pan'?'grab':'default';
+  }
+});
+
+// ────────────────────────────────────────────────────────────────
+// COPY / PASTE subtree
+// ────────────────────────────────────────────────────────────────
+function copySubtree(rootNode){
+  // Collect all nodes in the subtree (root + all descendants)
+  const ids=new Set([rootNode.id,...collectDescendants(rootNode.id)]);
+  const snapshotNodes=nodes.filter(n=>ids.has(n.id)).map(n=>JSON.parse(JSON.stringify(n)));
+  const snapshotConns=conns.filter(c=>ids.has(c.from)&&ids.has(c.to)).map(c=>JSON.parse(JSON.stringify(c)));
+  _clipboard={nodes:snapshotNodes,conns:snapshotConns,rootId:rootNode.id};
+  showToast('Copied '+snapshotNodes.length+' node'+(snapshotNodes.length!==1?'s':''));
+}
+
+function pasteSubtree(){
+  if(!_clipboard)return;
+  const parent=selN||(nodes.find(n=>n.isRoot)||null);
+  if(!parent)return;
+
+  // Build an id-remap so pasted nodes get fresh ids
+  const idMap={};
+  _clipboard.nodes.forEach(n=>{idMap[n.id]=uid();});
+
+  // Clone nodes with new ids, offset position slightly
+  const offset={x:40,y:40};
+  _clipboard.nodes.forEach(n=>{
+    const clone=JSON.parse(JSON.stringify(n));
+    clone.id=idMap[n.id];
+    clone.x=n.x+offset.x;
+    clone.y=n.y+offset.y;
+    clone.isRoot=false;
+    delete clone.branchColor; // will get fresh color
+    nodes.push(clone);
+    renderNode(clone);
+  });
+
+  // Re-wire internal connections with new ids
+  _clipboard.conns.forEach(c=>{
+    const newConn=JSON.parse(JSON.stringify(c));
+    newConn.id=uid();
+    newConn.from=idMap[c.from];
+    newConn.to=idMap[c.to];
+    conns.push(newConn);
+  });
+
+  // Connect clipboard root to the selected parent
+  const pastedRootId=idMap[_clipboard.rootId];
+  addConn(parent.id, pastedRootId);
+
+  // Select the pasted root
+  const pastedRoot=nodes.find(n=>n.id===pastedRootId);
+  if(pastedRoot) selNode(pastedRoot);
+
+  saveHist();trigSave();
+  requestAnimationFrame(()=>setTimeout(()=>runLayout(true),30));
+  showToast('Pasted');
+}
 
 boot();
 </script>

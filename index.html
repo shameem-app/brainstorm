@@ -21,9 +21,16 @@ html,body{height:100%;overflow:hidden;}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);
      display:flex;flex-direction:column;user-select:none;}
 #appWrap{flex:1;display:none;flex-direction:column;overflow:hidden;}
+/* Both screens start hidden — loading screen shown first */
 #authScreen{position:fixed;inset:0;z-index:999999;background:var(--bg);
-  display:flex;align-items:center;justify-content:center;}
+  display:none;align-items:center;justify-content:center;}
 #authForm input.pi:focus{border-color:var(--a);outline:none;}
+/* Loading spinner shown while Firebase resolves auth state */
+#loadScreen{position:fixed;inset:0;z-index:9999999;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;}
+#loadScreen .spin{width:36px;height:36px;border:3px solid var(--bd2);
+  border-top-color:var(--a);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
 
 /* ── TITLEBAR ── */
 .tb{height:42px;background:var(--sf);border-bottom:1px solid var(--bd);
@@ -357,6 +364,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);
 </style>
 </head>
 <body>
+
+<!-- LOADING SCREEN — shown while Firebase resolves auth -->
+<div id="loadScreen">
+  <div class="spin"></div>
+  <div style="font-size:11px;color:var(--tx3);">Loading Brain Storm…</div>
+</div>
 
 <!-- AUTH SCREEN -->
 <div id="authScreen">
@@ -879,6 +892,10 @@ let _unsubMaps=null;
 
 // ── Auth state listener ──
 onAuthStateChanged(auth,user=>{
+  // Always hide the loading screen first
+  const ls=document.getElementById('loadScreen');
+  if(ls) ls.style.display='none';
+
   currentUser=user;
   if(user){
     document.getElementById('authScreen').style.display='none';

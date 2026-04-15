@@ -1634,7 +1634,7 @@ function renderNode(node){
        `onfocus="onBasicFocus('${node.id}')" `+
        `onchange="nChg('${node.id}','text',this.value)" `+
        `onclick="event.stopPropagation()" `+
-       `onkeydown="onTypingKD(event,'${node.id}');textKD(event,'${node.id}')" `+
+       `onkeydown="textKD(event,'${node.id}')" `+
        `placeholder="${bullet?(bullet+' '):'Type here…'}">${esc(node.text)}</textarea>`;
     h+=`</div>`;
   }
@@ -1647,7 +1647,7 @@ function renderNode(node){
        `onchange="nChg('${node.id}','title',this.value)" `+
        `onfocus="onFieldFocus('${node.id}','title')" `+
        `onblur="nChgSave('${node.id}','title',this.value)" `+
-       `onkeydown="onTypingKD(event,'${node.id}');titleKD(event,'${node.id}')" `+
+       `onkeydown="titleKD(event,'${node.id}')" `+
        `onclick="event.stopPropagation()" `+
        `placeholder="Title…">`;
     h+=`</div>`;
@@ -1663,7 +1663,7 @@ function renderNode(node){
          `onblur="nChgSave('${node.id}','text',this.value)" `+
          `onfocus="onFieldFocus('${node.id}','text')" `+
          `onclick="event.stopPropagation()" `+
-         `onkeydown="onTypingKD(event,'${node.id}');textKD(event,'${node.id}')" placeholder="Add notes…">${esc(node.text)}</textarea>`;
+         `onkeydown="textKD(event,'${node.id}')" placeholder="Add notes…">${esc(node.text)}</textarea>`;
     if(node.type==='check'||node.checklist.length){
       h+=`<div class="ncl" style="${nS}">`;
       node.checklist.forEach(it=>{
@@ -1710,17 +1710,9 @@ function renderNode(node){
 // ── Basic node input: only auto-resize textarea while typing ──
 // Layout and save only happen on blur (when user leaves the field).
 let _basicTimer={};
-let _fieldSnap={}; // snapshot before editing for clean undo
 
-function onBasicFocus(nodeId){
-  const n=nodes.find(x=>x.id===nodeId);
-  if(n&&_fieldSnap[nodeId]===undefined) _fieldSnap[nodeId]=n.text;
-}
-function onFieldFocus(nodeId,field){
-  const n=nodes.find(x=>x.id===nodeId);
-  const k=nodeId+'_'+field;
-  if(n&&_fieldSnap[k]===undefined) _fieldSnap[k]=n[field];
-}
+function onBasicFocus(nodeId){}  // no-op — unified saveHist handles everything
+function onFieldFocus(nodeId,field){}  // no-op
 // ── Live width resize for basic nodes ──
 // Measures the longest line in the textarea and sets the node element width to fit.
 const _ruler=document.getElementById('txtRuler');
@@ -1810,20 +1802,15 @@ function autoResizeNodeWidth(ta, node){
   }
 }
 
-// Word-break characters that trigger a history snapshot
-const _WORD_BREAK=/^[ .,;:!?'"\)\(\[\]\/\\+\-=\n]$/;
-// Per-node timer for the pause-based snapshot
-let _histTimer={};
+// Word-break undo is now handled by the unified debounced saveHist() system
 
 function onBasicInput(ta, nodeId){
   ta.style.height='auto';
   ta.style.height=ta.scrollHeight+'px';
 
-  // Live width resize on every keystroke
   const n=nodes.find(x=>x.id===nodeId);
   if(n) autoResizeNodeWidth(ta, n);
 
-  // Debounced text update + bullet renumbering
   clearTimeout(_basicTimer[nodeId]);
   _basicTimer[nodeId]=setTimeout(()=>{
     const nd=nodes.find(x=>x.id===nodeId);
@@ -1838,32 +1825,11 @@ function onBasicInput(ta, nodeId){
       }
     }
     nd.text=ta.value;
+    saveHist(); // debounced — rapid typing batches into one step
   },150);
-
-  // Pause-based history snapshot (1.5s of no typing = save a step)
-  clearTimeout(_histTimer[nodeId]);
-  _histTimer[nodeId]=setTimeout(()=>{
-    const nd=nodes.find(x=>x.id===nodeId);
-    if(nd&&nd.text!==ta.value){nd.text=ta.value;}
-    saveHist();
-  },1500);
 }
 
 // Called from textarea onkeydown — saves undo snapshot on word-break chars
-function onTypingKD(e, nodeId){
-  const isWordBreak=_WORD_BREAK.test(e.key)||e.key==='Backspace'||e.key==='Delete';
-  if(isWordBreak){
-    const nd=nodes.find(x=>x.id===nodeId);
-    const ta=e.target;
-    if(!nd)return;
-    // Sync current field value before snapshot
-    const field=ta.classList.contains('ntitle')?'title':'text';
-    if(nd[field]!==ta.value) nd[field]=ta.value;
-    clearTimeout(_histTimer[nodeId]);
-    saveHist();
-  }
-}
-
 // Renumber all lines that start with "N. " (any number followed by ". ")
 function reNumberLines(text){
   const lines=text.split('\n');
@@ -1882,40 +1848,26 @@ function reNumberLines(text){
 function onBasicBlur(ta, nodeId){
   const n=nodes.find(x=>x.id===nodeId);
   if(!n)return;
-  const prev=_fieldSnap[nodeId];
-  delete _fieldSnap[nodeId];
 
   // Normalize bullet prefixes on every line when typing is finished
   let finalVal=ta.value;
   if(n.bullet&&n.bullet!=='1.'){
     const pfx=n.bullet+' ';
     finalVal=finalVal.split('\n').map(l=>{
-      if(l==='')return l; // keep empty lines as-is
+      if(l==='')return l;
       return l.startsWith(pfx)?l:pfx+l;
     }).join('\n');
-    if(finalVal!==ta.value){
-      ta.value=finalVal;
-      autoResizeNodeWidth(ta,n);
-    }
+    if(finalVal!==ta.value){ta.value=finalVal;autoResizeNodeWidth(ta,n);}
   } else if(n.bullet==='1.'){
     finalVal=reNumberLines(finalVal);
-    if(finalVal!==ta.value){
-      ta.value=finalVal;
-      autoResizeNodeWidth(ta,n);
-    }
+    if(finalVal!==ta.value){ta.value=finalVal;autoResizeNodeWidth(ta,n);}
   }
 
-  if(prev!==undefined&&n.text!==finalVal){
-    n.text=finalVal;
-    saveHist();
-  } else {
-    n.text=finalVal;
-  }
+  n.text=finalVal;
+  saveHist(true); // flush immediately on blur
   schedLayout(false);
   trigSave();
-  // Re-render links after text changes
-  const nd=nodes.find(x=>x.id===nodeId);
-  if(nd) renderLinks(nd);
+  renderLinks(n);
 }
 
 function barH(pct,dc){
@@ -2705,7 +2657,7 @@ function updStylePnl(){
 }
 function syncFF(id,val){document.querySelectorAll(`#${id} .fb`).forEach(b=>b.classList.toggle('on',b.dataset.ff===val));}
 function syncAl(id,val){document.querySelectorAll(`#${id} .ab`).forEach(b=>b.classList.toggle('on',b.dataset.al===val));}
-function apTitle(){if(!selN)return;selN.title=document.getElementById('pTitle').value;renderNode(selN);saveHist();trigSave();}
+function apTitle(){if(!selN)return;selN.title=document.getElementById('pTitle').value;renderNode(selN);saveHist(true);trigSave();}
 function apText(){if(!selN)return;selN.text=document.getElementById('pText').value;saveHist();trigSave();}
 
 // ════════════════════════════════════════════════════════════════
@@ -2829,10 +2781,10 @@ function tyApBullet(btn,bullet){
   btn.classList.add('on');
   saveHist();trigSave();
 }
-function apBg(){if(!selN)return;selN.bgColor=document.getElementById('pBg').value;renderNode(selN);saveHist();trigSave();}
-function apBd(){if(!selN)return;selN.borderColor=document.getElementById('pBd').value;renderNode(selN);saveHist();schedLayout();trigSave();}
-function apTx(){if(!selN)return;selN.textColor=document.getElementById('pTx').value;renderNode(selN);saveHist();trigSave();}
-function apOp(){if(!selN)return;selN.opacity=+document.getElementById('pOp').value;renderNode(selN);saveHist();trigSave();}
+function apBg(){if(!selN)return;selN.bgColor=document.getElementById('pBg').value;renderNode(selN);saveHist(true);trigSave();}
+function apBd(){if(!selN)return;selN.borderColor=document.getElementById('pBd').value;renderNode(selN);saveHist(true);schedLayout();trigSave();}
+function apTx(){if(!selN)return;selN.textColor=document.getElementById('pTx').value;renderNode(selN);saveHist(true);trigSave();}
+function apOp(){if(!selN)return;selN.opacity=+document.getElementById('pOp').value;renderNode(selN);saveHist(true);trigSave();}
 
 // ════════════════════════════════════════════════════════════════
 // GLOBAL LAYOUT OVERRIDES  (Layout tab)
@@ -2850,11 +2802,8 @@ function nChg(nid,f,v){const n=nodes.find(x=>x.id===nid);if(n){n[f]=v;}}
 function nChgSave(nid,f,v){
   const n=nodes.find(x=>x.id===nid);
   if(!n)return;
-  const k=nid+'_'+f;
-  const prev=_fieldSnap[k];
-  delete _fieldSnap[k];
-  if(prev!==undefined&&prev!==v){n[f]=v;saveHist();}
-  else n[f]=v;
+  n[f]=v;
+  saveHist(true); // flush immediately on blur
   trigSave();
 }
 
@@ -3018,19 +2967,69 @@ async function doSave(){
 }
 window.doSave=doSave;
 // ════════════════════════════════════════════════════════════════
-const MAX_HIST=50; // keep up to 50 undo steps
-function saveHist(){
+// ════════════════════════════════════════════════════════════════
+// UNDO / REDO — unified 300-step history
+// Every change calls saveHist() which debounces 400ms so rapid
+// typing/dragging batches into single steps. Immediate changes
+// (node create/delete, paste, style) call saveHist(true) to flush
+// without waiting.
+// ════════════════════════════════════════════════════════════════
+const MAX_HIST=300;
+let _histDebounce=null;
+
+function saveHist(immediate){
+  if(!immediate){
+    // Debounce: collect rapid changes (typing) into one step
+    clearTimeout(_histDebounce);
+    _histDebounce=setTimeout(()=>_pushHist(),400);
+  } else {
+    // Flush immediately for structural changes
+    clearTimeout(_histDebounce);
+    _pushHist();
+  }
+}
+
+function _pushHist(){
+  // Sync any active textarea value into its node before snapshotting
+  if(_editingNodeId){
+    const el=document.getElementById('n-'+_editingNodeId);
+    if(el){
+      const ta=el.querySelector('textarea.ntxt');
+      const ti=el.querySelector('input.ntitle');
+      const n=nodes.find(x=>x.id===_editingNodeId);
+      if(n&&ta) n.text=ta.value;
+      if(n&&ti) n.title=ti.value;
+    }
+  }
   const s=JSON.stringify({nodes,conns,COL_GAP,PAD_V});
-  hist=hist.slice(0,hIdx+1);hist.push(s);
-  if(hist.length>MAX_HIST){hist=hist.slice(hist.length-MAX_HIST);} // trim old
+  // Don't push duplicate consecutive state
+  if(hist.length>0&&hist[hIdx]===s)return;
+  hist=hist.slice(0,hIdx+1);
+  hist.push(s);
+  if(hist.length>MAX_HIST) hist=hist.slice(hist.length-MAX_HIST);
   hIdx=hist.length-1;
   updUndoRedo();
 }
+
 function undo(){
+  clearTimeout(_histDebounce);
+  // Flush current state first so we don't lose it
+  if(_editingNodeId){
+    const el=document.getElementById('n-'+_editingNodeId);
+    if(el){
+      const ta=el.querySelector('textarea.ntxt');
+      const ti=el.querySelector('input.ntitle');
+      const n=nodes.find(x=>x.id===_editingNodeId);
+      if(n&&ta) n.text=ta.value;
+      if(n&&ti) n.title=ti.value;
+    }
+    _pushHist();
+  }
   if(hIdx<=0||hist.length<=1)return;
   hIdx--;restH();updUndoRedo();
 }
 function redo(){
+  clearTimeout(_histDebounce);
   if(hIdx>=hist.length-1)return;
   hIdx++;restH();updUndoRedo();
 }
@@ -3041,7 +3040,7 @@ function updUndoRedo(){
   if(rBtn){rBtn.disabled=hIdx>=hist.length-1;rBtn.style.opacity=(hIdx>=hist.length-1)?'.35':'1';}
 }
 function restH(){
-  deactivateEdit(); // exit edit mode so restored text shows cleanly
+  deactivateEdit();
   const d=JSON.parse(hist[hIdx]);
   nodes=d.nodes;conns=d.conns;
   if(d.COL_GAP!==undefined){COL_GAP=d.COL_GAP;document.getElementById('ltCG').value=COL_GAP;document.getElementById('ltCGv').textContent=COL_GAP+'px';}

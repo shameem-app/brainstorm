@@ -3046,7 +3046,10 @@ function restH(){
   if(d.COL_GAP!==undefined){COL_GAP=d.COL_GAP;document.getElementById('ltCG').value=COL_GAP;document.getElementById('ltCGv').textContent=COL_GAP+'px';}
   if(d.PAD_V!==undefined){PAD_V=d.PAD_V;document.getElementById('ltRG').value=PAD_V;document.getElementById('ltRGv').textContent=PAD_V+'px';}
   cv.innerHTML='';svgL.innerHTML='<defs id="svgDefs"></defs>';
-  nodes.forEach(renderNode);renderConns();updStatus();
+  nodes.forEach(renderNode);
+  // Hide collapsed nodes immediately — before the browser paints — to prevent flash
+  reapplyCollapsed();
+  renderConns();updStatus();
   schedLayout();
 }
 

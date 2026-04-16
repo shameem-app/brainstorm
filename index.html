@@ -287,7 +287,23 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);
 .port-l{top:50%;left:-6px;transform:translateY(-50%);}
 .port-t{left:50%;top:-6px;transform:translateX(-50%);}
 .port-b{left:50%;bottom:-6px;transform:translateX(-50%);}
-/* Clickable links inside nodes */
+/* countdown date inputs are always interactive */
+.ncd-input{pointer-events:auto!important;user-select:auto!important;}
+.ncd{padding:10px 12px 6px;}
+.ncd-dates{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:8px;}
+.ncd-date{width:100%;text-align:center;}
+.ncd-label{font-size:9px;color:var(--tx3);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;}
+.ncd-input{background:var(--sf3);border:1px solid var(--bd);border-radius:6px;
+  color:var(--tx);font-size:10px;padding:4px 8px;width:100%;
+  font-family:'JetBrains Mono',monospace;cursor:pointer;text-align:center;}
+.ncd-input:focus{outline:none;border-color:var(--a);}
+.ncd-display{text-align:center;padding:6px 0 4px;}
+.ncd-time{font-family:'Syne',sans-serif;font-weight:700;font-size:18px;color:var(--tx);letter-spacing:.5px;line-height:1.2;}
+.ncd-sub{font-size:9.5px;color:var(--tx3);margin-top:3px;}
+.ncd-expired{color:var(--a2);font-size:11px;font-weight:600;}
+.ncd-bar{margin:6px 0 2px;height:6px;background:var(--bd2);border-radius:99px;overflow:hidden;}
+.ncd-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--a),var(--a2));
+  transition:width .5s ease;}
 .node-link{color:#60a5fa;text-decoration:underline;cursor:pointer;pointer-events:all;}
 .node-link:hover{color:#93c5fd;}
 .link-overlay a{pointer-events:all;}
@@ -448,6 +464,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);
   <button class="tbtn" onclick="addType('basic')">📦 Node</button>
   <button class="tbtn" onclick="addType('check')">✅ Task</button>
   <button class="tbtn" onclick="addType('img')">🖼 Image</button>
+  <button class="tbtn" onclick="addType('countdown')">⏳ Countdown</button>
   <div class="vsep"></div>
   <button class="tbtn" onclick="zOut()">−</button>
   <div class="zbox" id="zbox">100%</div>
@@ -1461,6 +1478,7 @@ function mkNode(o){
     type:o.type||'basic',title:o.title||'',text:o.text||'',isRoot:!!o.isRoot,
     bgColor:'',borderColor:'',textColor:'',accentColor:'',
     borderWidth:2,opacity:100,shape:'',bullet:'',
+    cdStart:'',cdEnd:'', // countdown start/end (ISO date strings)
     checklist:o.checklist||[],progress:0,tags:[],image:null,imgCap:'',
     tFF:'Syne',tSz:22,tAl:'center',tBold:false,tItalic:false,tUnder:false,
     nFF:'DM Sans',nSz:22,nAl:'center',nBold:false,nItalic:false,nUnder:false,
@@ -1656,14 +1674,31 @@ function renderNode(node){
       h+=`<div class="nimgw"><img class="nimg" src="${node.image}" onerror="this.style.display='none'" alt="">${node.imgCap?`<div class="nimgcap">📷 ${esc(node.imgCap)}</div>`:''}</div>`;
     else if(node.type==='img')
       h+=`<div class="nimg-btn" onclick="openImgMd('${node.id}')">🖼 Click to embed image</div>`;
-    // note textarea — skip for check nodes
-    if(node.type!=='check')
+    // note textarea — skip for check and countdown nodes
+    if(node.type!=='check'&&node.type!=='countdown')
       h+=`<textarea class="ntxt" rows="2" style="${nS}" `+
          `onchange="nChg('${node.id}','text',this.value)" `+
          `onblur="nChgSave('${node.id}','text',this.value)" `+
          `onfocus="onFieldFocus('${node.id}','text')" `+
          `onclick="event.stopPropagation()" `+
          `onkeydown="textKD(event,'${node.id}')" placeholder="Add notes…">${esc(node.text)}</textarea>`;
+    if(node.type==='countdown'){
+      const start=node.cdStart||'';
+      const end=node.cdEnd||'';
+      h+=`<div class="ncd">`;
+      h+=`<div class="ncd-dates" style="flex-direction:column;align-items:center;gap:8px;">`;
+      h+=`<div class="ncd-date" style="width:100%;text-align:center;">`+
+         `<div class="ncd-label">Start Date</div>`+
+         `<input class="ncd-input" type="date" value="${esc(start)}" `+
+         `onchange="cdSetDate('${node.id}','cdStart',this.value)" onclick="event.stopPropagation()"></div>`;
+      h+=`<div class="ncd-date" style="width:100%;text-align:center;">`+
+         `<div class="ncd-label">End Date</div>`+
+         `<input class="ncd-input" type="date" value="${esc(end)}" `+
+         `onchange="cdSetDate('${node.id}','cdEnd',this.value)" onclick="event.stopPropagation()"></div>`;
+      h+=`</div>`;
+      h+=cdDisplayHTML(node);
+      h+=`</div>`;
+    }
     if(node.type==='check'||node.checklist.length){
       h+=`<div class="ncl" style="${nS}">`;
       node.checklist.forEach(it=>{
@@ -1877,7 +1912,7 @@ function barH(pct,dc){
     `<div class="npgbar" style="height:${bh};background:${bb};border-radius:${br}">`+
     `<div class="npgfill" style="width:${pct}%;background:linear-gradient(90deg,${bc},var(--a2));border-radius:${br}"></div></div></div>`;
 }
-function ico(t){return {basic:'📋',check:'✅',img:'🖼'}[t]||'📦';}
+function ico(t){return {basic:'📋',check:'✅',img:'🖼',countdown:'⏳'}[t]||'📦';}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function gcss(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
 
@@ -3204,6 +3239,90 @@ function pasteSubtree(){
   requestAnimationFrame(()=>setTimeout(()=>runLayout(true),30));
   showToast('Pasted');
 }
+
+// ════════════════════════════════════════════════════════════════
+// COUNTDOWN NODE
+// ════════════════════════════════════════════════════════════════
+function cdDisplayHTML(node){
+  const start=node.cdStart?new Date(node.cdStart):null;
+  const end=node.cdEnd?new Date(node.cdEnd):null;
+  const now=new Date();
+
+  if(!start||!end||isNaN(start)||isNaN(end)){
+    return `<div class="ncd-display"><div class="ncd-sub">Set start and end dates above</div></div>`;
+  }
+
+  const totalMs=end-start;
+  const remainMs=end-now;
+  const elapsedMs=now-start;
+
+  if(remainMs<=0){
+    return `<div class="ncd-display"><div class="ncd-expired">⏰ Countdown complete!</div></div>`+
+           `<div class="ncd-bar"><div class="ncd-fill" style="width:100%"></div></div>`;
+  }
+  if(elapsedMs<0){
+    // Not started yet
+    const d=Math.floor(remainMs/86400000);
+    const h=Math.floor((remainMs%86400000)/3600000);
+    const m=Math.floor((remainMs%3600000)/60000);
+    return `<div class="ncd-display">`+
+      `<div class="ncd-time">${d}d ${h}h ${m}m</div>`+
+      `<div class="ncd-sub">until start</div></div>`+
+      `<div class="ncd-bar"><div class="ncd-fill" style="width:0%"></div></div>`;
+  }
+
+  const d=Math.floor(remainMs/86400000);
+  const h=Math.floor((remainMs%86400000)/3600000);
+  const m=Math.floor((remainMs%3600000)/60000);
+  const pct=Math.max(0,Math.min(100,Math.round((elapsedMs/totalMs)*100)));
+  const fillPct=100-pct; // remaining portion
+
+  return `<div class="ncd-display">`+
+    `<div class="ncd-time">${d}d ${h}h ${m}m</div>`+
+    `<div class="ncd-sub">${pct}% elapsed · ${100-pct}% remaining</div></div>`+
+    `<div class="ncd-bar"><div class="ncd-fill" style="width:${fillPct}%"></div></div>`;
+}
+
+function cdSetDate(nodeId, field, value){
+  const n=nodes.find(x=>x.id===nodeId);
+  if(!n)return;
+  n[field]=value;
+  // Re-render just the display portion without full renderNode
+  const el=document.getElementById('n-'+nodeId);
+  if(el){
+    const old=el.querySelector('.ncd-display,.ncd-bar,.ncd-expired');
+    if(old){
+      // Remove old display + bar
+      const toRemove=[];
+      el.querySelectorAll('.ncd-display,.ncd-bar').forEach(x=>toRemove.push(x));
+      toRemove.forEach(x=>x.remove());
+      // Insert new display HTML
+      const ncd=el.querySelector('.ncd');
+      if(ncd){
+        const tmp=document.createElement('div');
+        tmp.innerHTML=cdDisplayHTML(n);
+        while(tmp.firstChild) ncd.appendChild(tmp.firstChild);
+      }
+    }
+  }
+  saveHist(true);trigSave();
+}
+
+// Live tick — update all countdown displays every 30 seconds
+setInterval(()=>{
+  nodes.forEach(n=>{
+    if(n.type!=='countdown')return;
+    const el=document.getElementById('n-'+n.id);
+    if(!el)return;
+    // Remove old display + bar, insert fresh
+    const ncd=el.querySelector('.ncd');
+    if(!ncd)return;
+    ncd.querySelectorAll('.ncd-display,.ncd-bar').forEach(x=>x.remove());
+    const tmp=document.createElement('div');
+    tmp.innerHTML=cdDisplayHTML(n);
+    while(tmp.firstChild) ncd.appendChild(tmp.firstChild);
+  });
+},30000);
 
 boot();
 </script>
